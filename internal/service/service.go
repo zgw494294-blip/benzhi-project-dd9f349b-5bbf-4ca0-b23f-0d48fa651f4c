@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"coldchain-route-ledger/internal/domain"
@@ -368,8 +369,9 @@ func RunSelfCheck(ctx context.Context) error {
 }
 
 func findHandoff(events []domain.HandoffEvent, key string) (domain.HandoffEvent, bool) {
+	trimmed := strings.TrimSpace(key)
 	for _, event := range events {
-		if event.IdempotencyKey == key {
+		if event.IdempotencyKey == trimmed {
 			return event, true
 		}
 	}
@@ -385,7 +387,11 @@ func sameHandoff(event domain.HandoffEvent, request HandoffRequest) bool {
 	if occurredAt.IsZero() {
 		occurredAt = event.OccurredAt
 	}
-	return event.FromParty == request.FromParty && event.ToParty == request.ToParty && event.Location == request.Location && event.TemperatureCelsius == request.TemperatureCelsius && event.Unit == unit && event.Notes == request.Notes && event.IdempotencyKey == request.IdempotencyKey && event.OccurredAt.Equal(occurredAt.UTC().Truncate(time.Microsecond))
+	// The stored event has already been TrimSpace-normalized for FromParty,
+	// ToParty, Location, Notes and IdempotencyKey (see domain.AppendHandoff).
+	// Normalize the request fields the same way so retries that only differ by
+	// surrounding whitespace are treated as replays rather than conflicts.
+	return event.FromParty == strings.TrimSpace(request.FromParty) && event.ToParty == strings.TrimSpace(request.ToParty) && event.Location == strings.TrimSpace(request.Location) && event.TemperatureCelsius == request.TemperatureCelsius && event.Unit == unit && event.Notes == strings.TrimSpace(request.Notes) && event.IdempotencyKey == strings.TrimSpace(request.IdempotencyKey) && event.OccurredAt.Equal(occurredAt.UTC().Truncate(time.Microsecond))
 }
 
 func validateVersion(version int) error {
