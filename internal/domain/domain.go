@@ -214,16 +214,30 @@ func Dispatch(batch *DeliveryBatch, seals map[string]string, now time.Time) erro
 	if batch.Status != StatusDraft {
 		return stateError("只有草稿批次可以发运")
 	}
+	belonging := make(map[string]struct{}, len(batch.Boxes))
+	for _, box := range batch.Boxes {
+		belonging[box.ID] = struct{}{}
+	}
+	for boxID := range seals {
+		if _, ok := belonging[boxID]; !ok {
+			return invalid("seals", "药箱编号不属于该批次")
+		}
+	}
 	if len(seals) != len(batch.Boxes) {
 		return invalid("seals", "必须为每个药箱提供封签码")
 	}
+	normalized := make(map[string]string, len(batch.Boxes))
 	for index := range batch.Boxes {
 		box := &batch.Boxes[index]
 		seal := strings.TrimSpace(seals[box.ID])
 		if seal == "" {
 			return invalid("seals", "封签码不能为空")
 		}
-		box.SealCode = seal
+		normalized[box.ID] = seal
+	}
+	for index := range batch.Boxes {
+		box := &batch.Boxes[index]
+		box.SealCode = normalized[box.ID]
 		box.SealedAt = normalizeTime(now)
 	}
 	batch.Status = StatusDispatched
