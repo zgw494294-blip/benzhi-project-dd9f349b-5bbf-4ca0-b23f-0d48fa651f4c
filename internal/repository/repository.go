@@ -248,7 +248,7 @@ func (s *Store) UpdateBatch(ctx context.Context, id string, expectedVersion int,
 	}
 	candidate.Batches[id] = batch
 	if err := validateSnapshot(candidate); err != nil {
-		return domain.DeliveryBatch{}, nil, err
+		return domain.DeliveryBatch{}, nil, fmt.Errorf("%w: %v", ErrLedgerCorrupt, err)
 	}
 	if err := s.persistLocked(candidate); err != nil {
 		return domain.DeliveryBatch{}, nil, err
@@ -263,7 +263,7 @@ func (s *Store) persistLocked(candidate Snapshot) error {
 		return nil
 	}
 	if err := validateSnapshot(candidate); err != nil {
-		return err
+		return fmt.Errorf("%w: %v", ErrLedgerCorrupt, err)
 	}
 	encoded, err := json.MarshalIndent(candidate, "", "  ")
 	if err != nil {
@@ -345,6 +345,18 @@ func validateSnapshot(snapshot Snapshot) error {
 		}
 		if err := domain.ValidateReceipt(receipt); err != nil {
 			return err
+		}
+	}
+	for _, batch := range snapshot.Batches {
+		if batch.ReceiptID == "" {
+			continue
+		}
+		receipt, ok := snapshot.Receipts[batch.ReceiptID]
+		if !ok {
+			return fmt.Errorf("批次 %s 引用的签收凭据 %s 不存在", batch.ID, batch.ReceiptID)
+		}
+		if receipt.BatchID != batch.ID {
+			return fmt.Errorf("批次 %s 引用的签收凭据 %s 属于其他批次 %s", batch.ID, receipt.ID, receipt.BatchID)
 		}
 	}
 	return nil
