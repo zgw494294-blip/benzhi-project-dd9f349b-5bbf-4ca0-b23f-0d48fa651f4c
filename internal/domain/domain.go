@@ -444,6 +444,7 @@ func ValidateBatch(batch DeliveryBatch) error {
 		return err
 	}
 	seenKeys := make(map[string]struct{}, len(batch.Handoffs))
+	seenIDs := make(map[string]struct{}, len(batch.Handoffs))
 	for index, event := range batch.Handoffs {
 		if event.BatchID != batch.ID || event.Sequence != index+1 || event.ID == "" || event.FromParty == "" || event.ToParty == "" || event.Location == "" || event.IdempotencyKey == "" {
 			return invalid("handoffs", "交接事件链路不完整")
@@ -455,6 +456,10 @@ func ValidateBatch(batch DeliveryBatch) error {
 		if event.TemperatureCelsius < minTemperature(batch.Boxes) || event.TemperatureCelsius > maxTemperature(batch.Boxes) {
 			return invalid("handoffs", "交接温度超出允许范围")
 		}
+		if _, exists := seenIDs[event.ID]; exists {
+			return invalid("handoffs", "交接事件 ID 不能重复")
+		}
+		seenIDs[event.ID] = struct{}{}
 		if _, exists := seenKeys[event.IdempotencyKey]; exists {
 			return invalid("handoffs", "幂等键不能重复")
 		}
