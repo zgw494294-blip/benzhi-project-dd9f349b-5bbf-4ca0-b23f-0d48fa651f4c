@@ -314,6 +314,7 @@ func ReceiveBox(batch *DeliveryBatch, input ReceiveInput, now time.Time) error {
 	if err != nil {
 		return err
 	}
+	rollback := snapshotReceiveState(batch, boxIndex)
 	box.AcceptedAt = normalizeTime(now)
 	box.ReceivedQuantity = normalized.Quantity
 	box.Condition = normalized.Condition
@@ -323,12 +324,20 @@ func ReceiveBox(batch *DeliveryBatch, input ReceiveInput, now time.Time) error {
 		if candidate.AcceptedAt.IsZero() {
 			batch.Status = StatusReceivedPartial
 			batch.UpdatedAt = normalizeTime(now)
-			return ValidateBatch(*batch)
+			if err := ValidateBatch(*batch); err != nil {
+				rollback(batch)
+				return err
+			}
+			return nil
 		}
 	}
 	batch.Status = StatusReceived
 	batch.UpdatedAt = normalizeTime(now)
-	return ValidateBatch(*batch)
+	if err := ValidateBatch(*batch); err != nil {
+		rollback(batch)
+		return err
+	}
+	return nil
 }
 
 func ReceiveBoxes(batch *DeliveryBatch, inputs []ReceiveInput, now time.Time) error {
@@ -368,12 +377,18 @@ func ReceiveBoxes(batch *DeliveryBatch, inputs []ReceiveInput, now time.Time) er
 			return err
 		}
 	}
+	rollback := snapshotReceiveState(batch, -1)
 	for _, input := range inputs {
 		if err := ReceiveBox(batch, input, now); err != nil {
+			rollback(batch)
 			return err
 		}
 	}
-	return ValidateBatch(*batch)
+	if err := ValidateBatch(*batch); err != nil {
+		rollback(batch)
+		return err
+	}
+	return nil
 }
 
 func Close(batch *DeliveryBatch, receiptID string, now time.Time) error {
@@ -608,4 +623,34 @@ func stateError(message string) error {
 
 func normalizeTime(value time.Time) time.Time {
 	return value.UTC().Truncate(time.Microsecond)
+}
+
+// snapshotReceiveState captures the mutable fields ReceiveBox/ReceiveBoxes
+// touch so callers can restore them when the final ValidateBatch fails. A
+// boxIndex of -1 means "all boxes" (used by ReceiveBoxes). Returning a
+// closure keeps the rollback logic close to the mutation site and makes it
+// obvious that the same fields are restored regardless of which validation
+// path triggered the error.
+func snapshotReceiveState(batch *DeliveryBatch, boxIndex int) func(*DeliveryBatch) {
+	if batch == nil {
+		return func(*DeliveryBatch) {}
+	}
+	originalStatus := batch.Status
+	originalUpdatedAt := batch.UpdatedAt
+	originalBoxes := make([]MedicineBox, len(batch.Boxes))
+	copy(originalBoxes, batch.Boxes)
+	return func(target *DeliveryBatch) {
+		if target == nil {
+			return
+		}
+		target.Status = originalStatus
+		target.UpdatedAt = originalUpdatedAt
+		if boxIndex >= 0 && boxIndex < len(target.Boxes) && boxIndex < len(originalBoxes) {
+			target.Boxes[boxIndex] = originalBoxes[boxIndex]
+			return
+		}
+		if len(originalBoxes) == len(target.Boxes) {
+			copy(target.Boxes, originalBoxes)
+		}
+	}
 }
