@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1114">
+  <title>冷链路线账本</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand-lockup">
+        <div class="brand-mark" aria-hidden="true">CL</div>
+        <div>
+          <div class="brand-name">冷链路线账本</div>
+          <div class="brand-subtitle">社区药品配送控制台</div>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <div class="connection-state"><span class="pulse"></span><span>本地账本在线</span></div>
+        <button class="button button-primary" id="openCreate"><span class="button-icon" aria-hidden="true">+</span>新建批次</button>
+      </div>
+    </header>
+
+    <div class="app-grid">
+      <aside class="sidebar">
+        <div class="sidebar-heading">
+          <div>
+            <span class="eyebrow">配送调度</span>
+            <h1>批次目录</h1>
+          </div>
+          <button class="icon-button" id="refreshBatches" title="刷新批次" aria-label="刷新批次">↻</button>
+        </div>
+        <div class="filter-row">
+          <label class="sr-only" for="statusFilter">状态筛选</label>
+          <select id="statusFilter">
+            <option value="">全部状态</option>
+            <option value="Draft">草稿</option>
+            <option value="Dispatched">运输中</option>
+            <option value="ReceivedPartial">部分签收</option>
+            <option value="Received">待关闭</option>
+            <option value="Closed">已归档</option>
+          </select>
+        </div>
+        <div class="batch-list" id="batchList" aria-live="polite"></div>
+        <div class="sidebar-footer"><span id="batchCount">0 个批次</span><span class="ledger-dot"></span><span>JSON Ledger</span></div>
+      </aside>
+
+      <main class="content" id="mainContent">
+        <section class="empty-state" id="emptyState">
+          <div class="empty-kicker">CONTROL ROOM / 01</div>
+          <h2>让每一箱药品<br><em>可追溯地抵达。</em></h2>
+          <p>从路线、温区到签收凭据，所有节点都在同一条时间线上。</p>
+          <button class="button button-primary" id="emptyCreate"><span class="button-icon" aria-hidden="true">+</span>创建首个批次</button>
+        </section>
+
+        <section class="workspace" id="workspace" hidden>
+          <div class="workspace-head">
+            <div>
+              <div class="eyebrow" id="batchRouteDate">路线日期</div>
+              <div class="title-row"><h2 id="batchTitle">批次</h2><span class="status-badge" id="batchStatus">草稿</span></div>
+              <div class="batch-id" id="batchID"></div>
+            </div>
+            <div class="version-stamp">版本 <strong id="batchVersion">1</strong><span>·</span><span id="batchUpdated">刚刚更新</span></div>
+          </div>
+
+          <div class="route-strip">
+            <div class="route-node"><span class="route-label">起点</span><strong id="batchOrigin">—</strong></div>
+            <div class="route-line"><span class="route-line-dot"></span><span class="route-line-dot"></span><span class="route-line-dot"></span></div>
+            <div class="route-node route-node-right"><span class="route-label">目的地</span><strong id="batchDestination">—</strong></div>
+          </div>
+
+          <div class="stepper" id="stepper" aria-label="批次流程">
+            <div class="step" data-step="Draft"><span class="step-index">01</span><span>建档</span></div>
+            <div class="step-connector"></div>
+            <div class="step" data-step="Dispatched"><span class="step-index">02</span><span>发运</span></div>
+            <div class="step-connector"></div>
+            <div class="step" data-step="ReceivedPartial"><span class="step-index">03</span><span>交接与验收</span></div>
+            <div class="step-connector"></div>
+            <div class="step" data-step="Closed"><span class="step-index">04</span><span>归档</span></div>
+          </div>
+
+          <div class="dashboard-grid">
+            <section class="panel boxes-panel">
+              <div class="panel-heading"><div><span class="eyebrow">CARGO MANIFEST</span><h3>药箱清单</h3></div><span class="panel-count" id="boxCount">0 箱</span></div>
+              <div class="box-table" id="boxTable"></div>
+            </section>
+
+            <section class="panel action-panel" id="actionPanel">
+              <div class="panel-heading"><div><span class="eyebrow">NEXT ACTION</span><h3 id="actionTitle">等待操作</h3></div><span class="action-signal" id="actionSignal"></span></div>
+              <div id="actionBody"></div>
+            </section>
+          </div>
+
+          <div class="lower-grid">
+            <section class="panel timeline-panel">
+              <div class="panel-heading"><div><span class="eyebrow">AUDIT TRAIL</span><h3>审计时间线</h3></div><button class="text-button" id="refreshEvents">刷新 ↻</button></div>
+              <div class="timeline" id="timeline"></div>
+            </section>
+            <section class="panel receipt-panel" id="receiptPanel" hidden>
+              <div class="panel-heading"><div><span class="eyebrow">VERIFIED CREDENTIAL</span><h3>签收凭据</h3></div><span class="verified-mark">✓ 已核验</span></div>
+              <div class="receipt-content" id="receiptContent"></div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <dialog class="modal" id="createDialog">
+    <form method="dialog" class="modal-card" id="createForm">
+      <div class="modal-heading"><div><span class="eyebrow">NEW ROUTE</span><h2>建立配送批次</h2></div><button class="icon-button" value="cancel" title="关闭" aria-label="关闭">×</button></div>
+      <div class="form-grid form-grid-route">
+        <label>路线日期<input type="date" name="routeDate" required></label>
+        <label>配送起点<input name="origin" placeholder="社区药房" required></label>
+        <label>配送目的地<input name="destination" placeholder="卫生站" required></label>
+      </div>
+      <div class="box-editor-heading"><span>药箱配置</span><button type="button" class="text-button" id="addBox">+ 添加药箱</button></div>
+      <div class="box-editor" id="boxEditor"></div>
+      <div class="modal-actions"><button class="button button-quiet" value="cancel">取消</button><button class="button button-primary" value="default"><span class="button-icon" aria-hidden="true">→</span>保存批次</button></div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="/app.js" defer></script>
+</body>
+</html>
