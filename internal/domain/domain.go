@@ -309,7 +309,9 @@ func ReceiveBox(batch *DeliveryBatch, input ReceiveInput, now time.Time) error {
 	if boxIndex < 0 {
 		return fmt.Errorf("%w: boxID 不存在", ErrInvalidData)
 	}
-	box := &batch.Boxes[boxIndex]
+	candidate := *batch
+	candidate.Boxes = append([]MedicineBox(nil), batch.Boxes...)
+	box := &candidate.Boxes[boxIndex]
 	normalized, err := validateReceiveInput(*box, input)
 	if err != nil {
 		return err
@@ -318,17 +320,24 @@ func ReceiveBox(batch *DeliveryBatch, input ReceiveInput, now time.Time) error {
 	box.ReceivedQuantity = normalized.Quantity
 	box.Condition = normalized.Condition
 	box.ExceptionNote = normalized.ExceptionNote
-	batch.Status = StatusReceivedPartial
-	for _, candidate := range batch.Boxes {
-		if candidate.AcceptedAt.IsZero() {
-			batch.Status = StatusReceivedPartial
-			batch.UpdatedAt = normalizeTime(now)
-			return ValidateBatch(*batch)
+	candidate.Status = StatusReceivedPartial
+	for _, box := range candidate.Boxes {
+		if box.AcceptedAt.IsZero() {
+			candidate.UpdatedAt = normalizeTime(now)
+			if err := ValidateBatch(candidate); err != nil {
+				return err
+			}
+			*batch = candidate
+			return nil
 		}
 	}
-	batch.Status = StatusReceived
-	batch.UpdatedAt = normalizeTime(now)
-	return ValidateBatch(*batch)
+	candidate.Status = StatusReceived
+	candidate.UpdatedAt = normalizeTime(now)
+	if err := ValidateBatch(candidate); err != nil {
+		return err
+	}
+	*batch = candidate
+	return nil
 }
 
 func ReceiveBoxes(batch *DeliveryBatch, inputs []ReceiveInput, now time.Time) error {
