@@ -217,18 +217,29 @@ func Dispatch(batch *DeliveryBatch, seals map[string]string, now time.Time) erro
 	if len(seals) != len(batch.Boxes) {
 		return invalid("seals", "必须为每个药箱提供封签码")
 	}
-	for index := range batch.Boxes {
-		box := &batch.Boxes[index]
-		seal := strings.TrimSpace(seals[box.ID])
+	candidate := *batch
+	candidate.Boxes = append([]MedicineBox(nil), batch.Boxes...)
+	sealedAt := normalizeTime(now)
+	for index := range candidate.Boxes {
+		box := &candidate.Boxes[index]
+		sealValue, ok := seals[box.ID]
+		if !ok {
+			return invalid("seals", "必须为每个药箱提供封签码")
+		}
+		seal := strings.TrimSpace(sealValue)
 		if seal == "" {
 			return invalid("seals", "封签码不能为空")
 		}
 		box.SealCode = seal
-		box.SealedAt = normalizeTime(now)
+		box.SealedAt = sealedAt
 	}
-	batch.Status = StatusDispatched
-	batch.UpdatedAt = normalizeTime(now)
-	return ValidateBatch(*batch)
+	candidate.Status = StatusDispatched
+	candidate.UpdatedAt = sealedAt
+	if err := ValidateBatch(candidate); err != nil {
+		return err
+	}
+	*batch = candidate
+	return nil
 }
 
 func AppendHandoff(batch *DeliveryBatch, input HandoffInput, now time.Time) (HandoffEvent, error) {
