@@ -3,6 +3,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 )
@@ -262,6 +263,9 @@ func AppendHandoff(batch *DeliveryBatch, input HandoffInput, now time.Time) (Han
 	if err != nil {
 		return HandoffEvent{}, err
 	}
+	if !isFiniteTemperature(input.TemperatureCelsius) {
+		return HandoffEvent{}, invalid("temperatureCelsius", "温度必须是有限数值")
+	}
 	if input.TemperatureCelsius < minTemperature(batch.Boxes) || input.TemperatureCelsius > maxTemperature(batch.Boxes) {
 		return HandoffEvent{}, invalid("temperatureCelsius", "温度超出药箱允许范围")
 	}
@@ -452,6 +456,9 @@ func ValidateBatch(batch DeliveryBatch) error {
 		if err != nil || unit != event.Unit {
 			return invalid("handoffs", "交接温度单位不一致")
 		}
+		if !isFiniteTemperature(event.TemperatureCelsius) {
+			return invalid("handoffs", "交接温度必须是有限数值")
+		}
 		if event.TemperatureCelsius < minTemperature(batch.Boxes) || event.TemperatureCelsius > maxTemperature(batch.Boxes) {
 			return invalid("handoffs", "交接温度超出允许范围")
 		}
@@ -565,10 +572,17 @@ func validateNewBox(box MedicineBox) error {
 	if box.Quantity <= 0 {
 		return invalid("quantity", "药箱数量必须为正")
 	}
+	if !isFiniteTemperature(box.RequiredMinCelsius) || !isFiniteTemperature(box.RequiredMaxCelsius) {
+		return invalid("temperatureRange", "温控上下限必须是有限数值")
+	}
 	if box.RequiredMinCelsius > box.RequiredMaxCelsius {
 		return invalid("temperatureRange", "温控下限不能高于上限")
 	}
 	return nil
+}
+
+func isFiniteTemperature(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0)
 }
 
 func validateTemperatureIntersection(boxes []MedicineBox) error {
