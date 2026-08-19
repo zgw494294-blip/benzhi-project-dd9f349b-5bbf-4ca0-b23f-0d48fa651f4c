@@ -281,12 +281,19 @@ func AppendHandoff(batch *DeliveryBatch, input HandoffInput, now time.Time) (Han
 		FromParty: fromParty, ToParty: toParty, OccurredAt: occurredAt, Location: location,
 		TemperatureCelsius: input.TemperatureCelsius, Unit: unit, Notes: strings.TrimSpace(input.Notes), IdempotencyKey: key,
 	}
-	batch.Handoffs = append(batch.Handoffs, event)
-	batch.TemperatureReadings = append(batch.TemperatureReadings, TemperatureReading{
+	candidate := *batch
+	candidate.Handoffs = append([]HandoffEvent(nil), batch.Handoffs...)
+	candidate.TemperatureReadings = append([]TemperatureReading(nil), batch.TemperatureReadings...)
+	candidate.Handoffs = append(candidate.Handoffs, event)
+	candidate.TemperatureReadings = append(candidate.TemperatureReadings, TemperatureReading{
 		ID: event.ID + "-temperature", HandoffID: event.ID, RecordedAt: occurredAt, TemperatureCelsius: input.TemperatureCelsius, Unit: unit,
 	})
-	batch.UpdatedAt = normalizeTime(now)
-	return event, ValidateBatch(*batch)
+	candidate.UpdatedAt = normalizeTime(now)
+	if err := ValidateBatch(candidate); err != nil {
+		return HandoffEvent{}, err
+	}
+	*batch = candidate
+	return event, nil
 }
 
 func ReceiveBox(batch *DeliveryBatch, input ReceiveInput, now time.Time) error {
