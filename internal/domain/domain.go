@@ -314,7 +314,18 @@ func ReceiveBox(batch *DeliveryBatch, input ReceiveInput, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	box.AcceptedAt = normalizeTime(now)
+	receivedAt := normalizeTime(now)
+	if receivedAt.Before(batch.CreatedAt) {
+		return invalid("acceptedAt", "签收时间不能早于批次创建时间")
+	}
+	lastHandoffAt := batch.Handoffs[len(batch.Handoffs)-1].OccurredAt
+	if receivedAt.Before(lastHandoffAt) {
+		return invalid("acceptedAt", "签收时间不能早于最后一条交接时间")
+	}
+	if receivedAt.Before(batch.UpdatedAt) {
+		return invalid("updatedAt", "签收时间不能早于批次当前更新时间")
+	}
+	box.AcceptedAt = receivedAt
 	box.ReceivedQuantity = normalized.Quantity
 	box.Condition = normalized.Condition
 	box.ExceptionNote = normalized.ExceptionNote
@@ -322,12 +333,12 @@ func ReceiveBox(batch *DeliveryBatch, input ReceiveInput, now time.Time) error {
 	for _, candidate := range batch.Boxes {
 		if candidate.AcceptedAt.IsZero() {
 			batch.Status = StatusReceivedPartial
-			batch.UpdatedAt = normalizeTime(now)
+			batch.UpdatedAt = receivedAt
 			return ValidateBatch(*batch)
 		}
 	}
 	batch.Status = StatusReceived
-	batch.UpdatedAt = normalizeTime(now)
+	batch.UpdatedAt = receivedAt
 	return ValidateBatch(*batch)
 }
 
