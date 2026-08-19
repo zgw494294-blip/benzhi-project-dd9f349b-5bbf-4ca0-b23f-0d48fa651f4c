@@ -143,6 +143,22 @@ func (s *Service) Handoff(ctx context.Context, id string, request HandoffRequest
 	if err := validateVersion(request.ExpectedVersion); err != nil {
 		return HandoffResult{}, err
 	}
+	current, err := s.repo.GetBatch(ctx, id)
+	if err != nil {
+		return HandoffResult{}, mapRepositoryError(err)
+	}
+	if err := contextError(ctx); err != nil {
+		return HandoffResult{}, err
+	}
+	if request.ExpectedVersion != current.Version {
+		if existing, ok := findHandoff(current.Handoffs, request.IdempotencyKey); ok {
+			if !sameHandoff(existing, request) {
+				return HandoffResult{}, fmt.Errorf("%w: 幂等键已绑定其他交接内容", ErrIdempotency)
+			}
+			return HandoffResult{Batch: current, Event: existing, Replayed: true}, nil
+		}
+		return HandoffResult{}, conflict(request.ExpectedVersion, current.Version)
+	}
 	var output HandoffResult
 	result, value, err := s.repo.UpdateBatch(ctx, id, request.ExpectedVersion, func(batch *domain.DeliveryBatch, _ *repository.Snapshot) (repository.Mutation, error) {
 		if err := contextError(ctx); err != nil {

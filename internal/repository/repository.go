@@ -223,6 +223,10 @@ func (s *Store) UpdateBatch(ctx context.Context, id string, expectedVersion int,
 	if _, ok := s.data.Batches[id]; !ok {
 		return domain.DeliveryBatch{}, nil, fmt.Errorf("%w: batch %s", ErrNotFound, id)
 	}
+	current := s.data.Batches[id]
+	if expectedVersion != current.Version {
+		return domain.DeliveryBatch{}, nil, fmt.Errorf("%w: expected %d, actual %d", ErrVersionConflict, expectedVersion, current.Version)
+	}
 	candidate, err := cloneSnapshot(s.data)
 	if err != nil {
 		return domain.DeliveryBatch{}, nil, err
@@ -231,9 +235,6 @@ func (s *Store) UpdateBatch(ctx context.Context, id string, expectedVersion int,
 	mutation, err := mutate(&batch, &candidate)
 	if err != nil {
 		return domain.DeliveryBatch{}, nil, err
-	}
-	if expectedVersion != s.data.Batches[id].Version && !mutation.IgnoreVersion {
-		return domain.DeliveryBatch{}, nil, fmt.Errorf("%w: expected %d, actual %d", ErrVersionConflict, expectedVersion, s.data.Batches[id].Version)
 	}
 	if !mutation.Changed {
 		current, cloneErr := cloneBatch(s.data.Batches[id])
