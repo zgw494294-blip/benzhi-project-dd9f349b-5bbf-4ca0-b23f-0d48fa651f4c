@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"coldchain-route-ledger/internal/domain"
@@ -377,6 +378,10 @@ func findHandoff(events []domain.HandoffEvent, key string) (domain.HandoffEvent,
 }
 
 func sameHandoff(event domain.HandoffEvent, request HandoffRequest) bool {
+	fromParty := strings.TrimSpace(request.FromParty)
+	toParty := strings.TrimSpace(request.ToParty)
+	location := strings.TrimSpace(request.Location)
+	notes := strings.TrimSpace(request.Notes)
 	unit, err := domain.NormalizeUnit(request.Unit)
 	if err != nil {
 		return false
@@ -385,7 +390,7 @@ func sameHandoff(event domain.HandoffEvent, request HandoffRequest) bool {
 	if occurredAt.IsZero() {
 		occurredAt = event.OccurredAt
 	}
-	return event.FromParty == request.FromParty && event.ToParty == request.ToParty && event.Location == request.Location && event.TemperatureCelsius == request.TemperatureCelsius && event.Unit == unit && event.Notes == request.Notes && event.IdempotencyKey == request.IdempotencyKey && event.OccurredAt.Equal(occurredAt.UTC().Truncate(time.Microsecond))
+	return event.FromParty == fromParty && event.ToParty == toParty && event.Location == location && event.TemperatureCelsius == request.TemperatureCelsius && event.Unit == unit && event.Notes == notes && event.IdempotencyKey == request.IdempotencyKey && event.OccurredAt.Equal(occurredAt.UTC().Truncate(time.Microsecond))
 }
 
 func validateVersion(version int) error {
