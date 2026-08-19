@@ -55,6 +55,9 @@ func BuildReceipt(batch domain.DeliveryBatch, receiver, receiptID string, signed
 		return domain.ReceiptCredential{}, fmt.Errorf("%w: receiver 和 receiptID 不能为空", domain.ErrInvalidData)
 	}
 	signedAt = signedAt.UTC().Truncate(time.Microsecond)
+	if err := validateReceiptSigningTime(batch, signedAt); err != nil {
+		return domain.ReceiptCredential{}, err
+	}
 	timeline := timelineAt(batch, &domain.ReceiptCredential{ID: receiptID, BatchID: batch.ID, Receiver: strings.TrimSpace(receiver), SignedAt: signedAt})
 	timelineDigest, err := digestJSON(timeline)
 	if err != nil {
@@ -72,6 +75,23 @@ func BuildReceipt(batch domain.DeliveryBatch, receiver, receiptID string, signed
 	}
 	receipt.ReceiptHash = hashValue
 	return receipt, domain.ValidateReceipt(receipt)
+}
+
+func validateReceiptSigningTime(batch domain.DeliveryBatch, signedAt time.Time) error {
+	if signedAt.Before(batch.CreatedAt) {
+		return fmt.Errorf("%w: 签收时间不能早于批次创建时间", domain.ErrInvalidData)
+	}
+	for _, handoff := range batch.Handoffs {
+		if signedAt.Before(handoff.OccurredAt) {
+			return fmt.Errorf("%w: 签收时间不能早于运输交接时间", domain.ErrInvalidData)
+		}
+	}
+	for _, box := range batch.Boxes {
+		if !box.AcceptedAt.IsZero() && signedAt.Before(box.AcceptedAt) {
+			return fmt.Errorf("%w: 签收时间不能早于药箱验收时间", domain.ErrInvalidData)
+		}
+	}
+	return nil
 }
 
 func VerifyReceipt(batch domain.DeliveryBatch, receipt domain.ReceiptCredential) error {
