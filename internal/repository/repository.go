@@ -347,6 +347,18 @@ func validateSnapshot(snapshot Snapshot) error {
 			return err
 		}
 	}
+	for id, batch := range snapshot.Batches {
+		if batch.Status != domain.StatusClosed {
+			continue
+		}
+		receipt, ok := snapshot.Receipts[batch.ReceiptID]
+		if !ok {
+			return fmt.Errorf("关闭批次引用的凭据不存在: %s", batch.ReceiptID)
+		}
+		if receipt.BatchID != id {
+			return fmt.Errorf("关闭批次与凭据批次不一致: %s", id)
+		}
+	}
 	return nil
 }
 
