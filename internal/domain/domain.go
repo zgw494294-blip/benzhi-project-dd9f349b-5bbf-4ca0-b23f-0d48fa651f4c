@@ -546,14 +546,22 @@ func ValidateReceipt(receipt ReceiptCredential) error {
 		return invalid("boxResults", "签收凭据必须包含药箱结果")
 	}
 	seen := make(map[string]struct{}, len(receipt.BoxResults))
+	previousBoxID := ""
 	for _, result := range receipt.BoxResults {
 		if result.BoxID == "" || result.Quantity <= 0 || (result.Condition != ConditionAccepted && result.Condition != ConditionException && result.Condition != ConditionRejected) || result.AcceptedAt.IsZero() {
 			return invalid("boxResults", "签收凭据药箱结果无效")
+		}
+		if (result.Condition == ConditionException || result.Condition == ConditionRejected) && strings.TrimSpace(result.ExceptionNote) == "" {
+			return invalid("exceptionNote", "异常或拒收结果必须填写备注")
+		}
+		if previousBoxID != "" && result.BoxID < previousBoxID {
+			return invalid("boxResults", "签收凭据药箱结果必须按 BoxID 升序排列")
 		}
 		if _, exists := seen[result.BoxID]; exists {
 			return invalid("boxResults", "签收凭据不能重复记录药箱")
 		}
 		seen[result.BoxID] = struct{}{}
+		previousBoxID = result.BoxID
 	}
 	return nil
 }
