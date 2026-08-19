@@ -474,7 +474,21 @@ func ValidateBatch(batch DeliveryBatch) error {
 	}
 	for index, reading := range batch.TemperatureReadings {
 		event := batch.Handoffs[index]
-		if reading.HandoffID != event.ID || reading.Unit != UnitCelsius || reading.TemperatureCelsius != event.TemperatureCelsius {
+		expectedReadingID := event.ID + "-temperature"
+		if reading.ID == "" || reading.ID != expectedReadingID {
+			return invalid("temperatureReadings", "温度采样身份与交接不一致")
+		}
+		if reading.HandoffID == "" || reading.HandoffID != event.ID {
+			return invalid("temperatureReadings", "温度采样引用的交接无效")
+		}
+		unit, err := NormalizeUnit(reading.Unit)
+		if err != nil || unit != reading.Unit || reading.Unit != event.Unit {
+			return invalid("temperatureReadings", "温度采样单位与交接不一致")
+		}
+		if reading.RecordedAt.IsZero() || !reading.RecordedAt.Equal(event.OccurredAt) {
+			return invalid("temperatureReadings", "温度采样时间与交接不一致")
+		}
+		if reading.TemperatureCelsius != event.TemperatureCelsius {
 			return invalid("temperatureReadings", "温度采样与交接不一致")
 		}
 	}
