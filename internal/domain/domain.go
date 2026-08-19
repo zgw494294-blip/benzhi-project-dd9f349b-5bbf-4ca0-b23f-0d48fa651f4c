@@ -443,11 +443,17 @@ func ValidateBatch(batch DeliveryBatch) error {
 	if err := validateTemperatureIntersection(batch.Boxes); err != nil {
 		return err
 	}
+	seenHandoffIDs := make(map[string]int, len(batch.Handoffs))
 	seenKeys := make(map[string]struct{}, len(batch.Handoffs))
 	for index, event := range batch.Handoffs {
 		if event.BatchID != batch.ID || event.Sequence != index+1 || event.ID == "" || event.FromParty == "" || event.ToParty == "" || event.Location == "" || event.IdempotencyKey == "" {
 			return invalid("handoffs", "交接事件链路不完整")
 		}
+		firstSequence, exists := seenHandoffIDs[event.ID]
+		if exists {
+			return invalid("handoffs", fmt.Sprintf("交接事件 ID 不能重复，第 %d 和第 %d 条冲突", firstSequence, event.Sequence))
+		}
+		seenHandoffIDs[event.ID] = event.Sequence
 		unit, err := NormalizeUnit(event.Unit)
 		if err != nil || unit != event.Unit {
 			return invalid("handoffs", "交接温度单位不一致")
